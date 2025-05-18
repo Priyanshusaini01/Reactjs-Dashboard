@@ -312,12 +312,9 @@ const Sidebar = () => {
           <Button
             variant="ghost"
             className="flex w-full justify-start gap-2 text-muted-foreground"
-            asChild
           >
-            <Link to="/logout">
-              <LogoutIcon />
-              Logout
-            </Link>
+            <LogoutIcon />
+            Logout
           </Button>
         </div>
       </ScrollArea>

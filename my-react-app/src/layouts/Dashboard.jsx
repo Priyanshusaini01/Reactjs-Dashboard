@@ -15,19 +15,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-// Try-catch import for Clerk to handle both dev and production
-let useUser, useClerk;
-try {
-  const clerkModule = require("@clerk/clerk-react");
-  useUser = clerkModule.useUser;
-  useClerk = clerkModule.useClerk;
-} catch (error) {
-  console.error("Error importing Clerk:", error);
-  // Mock implementations if Clerk fails to load
-  useUser = () => ({ user: null, isLoaded: true });
-  useClerk = () => ({ signOut: async () => {} });
-}
-
 // Sample search data (in a real app, this would come from your global state or API)
 const searchableContent = [
   { id: 1, title: "10 Ways to Improve Your Website's SEO in 2023", type: "Blog Post", path: "/" },
@@ -42,6 +29,15 @@ const searchableContent = [
   { id: 10, title: "User Engagement Metrics", type: "Dashboard", path: "/analytics" },
 ];
 
+// Default user for the dashboard
+const defaultUser = {
+  fullName: "Demo User",
+  firstName: "Demo",
+  email: "demo@example.com",
+  emailAddresses: [{ emailAddress: "demo@example.com" }],
+  imageUrl: null
+};
+
 // Dashboard Layout Component
 const Dashboard = ({ children }) => {
   const [isDarkMode, setIsDarkMode] = useState(
@@ -50,67 +46,10 @@ const Dashboard = ({ children }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
-  const [authChecked, setAuthChecked] = useState(false);
+  const [user] = useState(defaultUser);
   const searchRef = useRef(null);
   const navigate = useNavigate();
   const location = useLocation();
-  
-  // Check authentication once on mount
-  useEffect(() => {
-    if (authChecked) return; // Skip if already checked
-
-    // If using dev mode, check if authenticated
-    const isDevMode = !import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || 
-                     import.meta.env.VITE_CLERK_PUBLISHABLE_KEY === "";
-    
-    // In dev mode, check if we have the acknowledgment flag
-    if (isDevMode && sessionStorage.getItem('devModeAcknowledged') !== 'true') {
-      navigate('/sign-in', { replace: true });
-    }
-    
-    setAuthChecked(true);
-    // In real Clerk mode, auth is handled by the ProtectedRoute component
-  }, [navigate, authChecked]);
-  
-  // Get mock user from session storage if in development mode
-  const getDevModeUser = () => {
-    const userJson = sessionStorage.getItem('devModeUser');
-    if (userJson) {
-      try {
-        return JSON.parse(userJson);
-      } catch (e) {
-        return null;
-      }
-    }
-    return null;
-  };
-  
-  // Mock user for development mode
-  const mockUser = getDevModeUser() || {
-    fullName: "Demo User",
-    firstName: "Demo",
-    emailAddresses: [{ emailAddress: "demo@example.com" }],
-    imageUrl: null
-  };
-  
-  const [isUsingMockUser, setIsUsingMockUser] = useState(false);
-  const { user } = useUser ? useUser() : { user: null };
-  const { signOut } = useClerk ? useClerk() : { signOut: async () => {} };
-  
-  // If Clerk didn't load a user after 1 second, fall back to mock user
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (!user) {
-        setIsUsingMockUser(true);
-        console.log("Using mock user due to no Clerk user detected");
-      }
-    }, 1000);
-    
-    return () => clearTimeout(timer);
-  }, [user]);
-  
-  // User to display in UI - either real Clerk user or mock
-  const displayUser = user || (isUsingMockUser ? mockUser : null);
   
   // Click outside to close search results
   useEffect(() => {
@@ -171,34 +110,17 @@ const Dashboard = ({ children }) => {
     setShowSearchResults(false);
   };
 
-  const handleSignOut = async () => {
-    try {
-      // If using real user, use clerk signOut
-      if (user && signOut) {
-        await signOut();
-      } else {
-        // In dev mode, clear the session storage
-        sessionStorage.removeItem('devModeAcknowledged');
-        sessionStorage.removeItem('devModeUser');
-      }
-      // Redirect to sign-in regardless of mode
-      navigate('/sign-in');
-    } catch (error) {
-      console.error("Error signing out:", error);
-      navigate('/sign-in');
-    }
-  };
-
   return (
     <div className="flex min-h-screen">
-      {/* Sidebar for desktop */}
-      <div className="hidden md:block">
+      {/* Fixed Sidebar for desktop */}
+      <div className="hidden md:block fixed left-0 top-0 h-full z-40">
         <Sidebar />
       </div>
       
-      {/* Main Content */}
-      <div className="flex-1">
-        <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-background/80 backdrop-blur-sm px-6 shadow-sm">
+      {/* Main Content - with padding to account for fixed sidebar */}
+      <div className="flex-1 md:ml-64">
+        {/* Fixed Header/Navbar */}
+        <header className="fixed top-0 right-0 left-0 md:left-64 z-30 flex h-16 items-center gap-4 border-b bg-background/95 backdrop-blur-sm px-6 shadow-sm">
           <MobileSidebar />
           
           {/* Search */}
@@ -248,68 +170,59 @@ const Dashboard = ({ children }) => {
             )}
           </div>
           
-          <div className="ml-auto flex items-center gap-4">
-            {/* Dark Mode Toggle */}
-            <Button variant="ghost" size="icon" className="rounded-full" onClick={toggleDarkMode}>
-              {isDarkMode ? (
-                <SunIcon className="h-5 w-5 text-amber-300" />
-              ) : (
-                <MoonIcon className="h-5 w-5 text-slate-600" />
-              )}
+          {/* Right side actions */}
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" onClick={toggleDarkMode} className="hidden sm:flex">
+              {isDarkMode ? <SunIcon className="h-5 w-5" /> : <MoonIcon className="h-5 w-5" />}
+              <span className="sr-only">Toggle theme</span>
             </Button>
             
-            {/* Notification Button */}
-            <Button variant="ghost" size="icon" className="relative rounded-full">
+            <Button variant="ghost" size="icon" className="relative hidden sm:flex">
               <BellIcon className="h-5 w-5" />
-              <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-primary"></span>
+              <span className="sr-only">Notifications</span>
+              <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-red-600"></span>
             </Button>
             
-            {/* User Account Dropdown */}
+            {/* User Account Menu */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="rounded-full p-0 h-9 w-9">
-                  <Avatar className="h-9 w-9 ring-2 ring-background">
-                    {displayUser?.imageUrl ? (
-                      <AvatarImage src={displayUser.imageUrl} alt={displayUser?.fullName || "User"} />
-                    ) : (
-                      <AvatarFallback className="bg-primary text-primary-foreground">
-                        {displayUser?.firstName?.charAt(0) || displayUser?.emailAddresses?.[0]?.emailAddress?.charAt(0)?.toUpperCase() || "D"}
-                      </AvatarFallback>
-                    )}
+                <Button variant="ghost" size="sm" className="relative h-8 flex items-center gap-2 rounded-full pr-2">
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src={user?.imageUrl} alt={user?.fullName || "User"} />
+                    <AvatarFallback>
+                      {user?.firstName ? user.firstName.charAt(0) : "U"}
+                    </AvatarFallback>
                   </Avatar>
+                  <span className="text-sm font-medium hidden md:inline-block mr-2">
+                    {user?.fullName || user?.email?.split('@')[0] || "User"}
+                  </span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>
-                  <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">{displayUser?.fullName || displayUser?.name || "User"}</p>
-                    <p className="text-xs leading-none text-muted-foreground">{displayUser?.emailAddresses?.[0]?.emailAddress || displayUser?.email || ""}</p>
-                  </div>
-                </DropdownMenuLabel>
+                <DropdownMenuLabel>My Account</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => navigate("/account")}>
+                {user && (
+                  <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                    {user.emailAddresses && user.emailAddresses[0]?.emailAddress}
+                  </div>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="cursor-pointer">
                   <UserIcon className="mr-2 h-4 w-4" />
-                  <span>Account</span>
+                  <span>Profile</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => navigate("/settings")}>
+                <DropdownMenuItem className="cursor-pointer">
                   <Settings className="mr-2 h-4 w-4" />
                   <span>Settings</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleSignOut}>
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Log out</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
         </header>
         
-        <main className="container mx-auto px-4 py-6">
-          {/* Main content wrapper with glass effect */}
-          <div className="rounded-xl backdrop-blur-[2px]">
-            {children}
-          </div>
+        {/* Page content - with padding to account for fixed header */}
+        <main className="pt-20 p-4 md:p-6">
+          {children}
         </main>
       </div>
     </div>
